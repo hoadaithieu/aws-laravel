@@ -34,9 +34,6 @@ jobs:
       - name: Execute tests
         run: vendor/bin/phpunit
 
-      - name: Build assets
-        run: php artisan asset:install
-
       - name: SSH to AWS and deploy
         uses: appleboy/ssh-action@master
         with:
