@@ -1,0 +1,55 @@
+name: Build & Deploy to EC2 (master)
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite
+          coverage: none
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Copy environment file
+        run: cp .env.example .env
+
+      - name: Generate app key
+        run: php artisan key:generate
+
+      - name: Execute tests
+        run: vendor/bin/phpunit
+
+      - name: Build assets
+        run: php artisan asset:install
+
+      - name: Deploy to AWS
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set default.region us-west-2  # Change this to your preferred AWS region
+
+          # For EC2 Deployment
+          # aws ec2-instance-connect send-ssh-public-key --instance-id <instance_id> --availability-zone <availability_zone> --instance-os-user ec2-user --ssh-public-key file://~/.ssh/id_rsa.pub
+
+          # For Elastic Beanstalk Deployment
+          # eb deploy <your-environment-name>
+
+          # For other deployment methods, use appropriate AWS CLI commands
+
+      - name: Clean Up
+        run: php artisan optimize:clear        
