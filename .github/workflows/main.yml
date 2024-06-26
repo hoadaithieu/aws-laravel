@@ -1,47 +1,37 @@
-name: Build & Deploy to EC2 (main)
+name: Deploy to AWS Elastic Beanstalk
 
 on:
   push:
     branches:
       - main
-  pull_request:
-
 
 jobs:
-  build-deploy:
+  deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
         with:
-          php-version: ${{ matrix.php }}
-          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite
-          coverage: none
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
-      - name: Install Composer dependencies
-        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Login to Amazon ECR
+        run: aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
 
-      - name: Copy environment file
-        run: cp .env.example .env
+      - name: Build and push Docker image
+        run: |
+          docker build -t your-image-name .
+          docker tag your-image-name:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/your-image-name:latest
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/your-image-name:latest
 
-      - name: Generate app key
-        run: php artisan key:generate
+      - name: Deploy to AWS Elastic Beanstalk
+        run: |
+          aws elasticbeanstalk create-application-version --application-name your-app-name \
+            --version-label ${{ github.sha }} --source-bundle S3Bucket=elasticbeanstalk-us-east-1-${{ secrets.AWS_ACCOUNT_ID }},S3Key=your-image-name/${{ github.sha }}.zip
+          aws elasticbeanstalk update-environment --application-name your-app-name --environment-name your-env-name \
+            --version-label ${{ github.sha }}
 
-      - name: Execute tests
-        run: vendor/bin/phpunit
-
-      - name: SSH to AWS and deploy
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.AWS_HOST }}
-          username: ${{ secrets.AWS_USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          script: |
-            cd /var/www/laravel
-            git pull origin main
-            # Run any additional deployment commands here
